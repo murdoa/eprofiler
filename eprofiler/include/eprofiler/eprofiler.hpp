@@ -1,6 +1,7 @@
 #ifndef EPROFILER_EPROFILER_HPP
 #define EPROFILER_EPROFILER_HPP
 
+#include <span>
 #include <eprofiler/stringconstant.hpp>
 
 namespace eprofiler {
@@ -33,6 +34,8 @@ public:
     static StringConstant_WithID<CharT, Chars...> convert_string_constant(StringConstant<CharT, Chars...> const& sc) noexcept {
         return StringConstant_WithID<CharT, Chars...>{sc};
     }
+
+    const static std::span<const std::string_view> tags;
 
 private:
 

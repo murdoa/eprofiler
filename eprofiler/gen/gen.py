@@ -66,28 +66,39 @@ if __name__ == '__main__':
         f.write('#include <cstdint>\n')
         f.write('#include <eprofiler/eprofiler.hpp>\n\n')
 
-        for profiler, tags in strings.items():
+        for profiler_idx, profiler in enumerate(strings.keys()):
+            tags = strings[profiler]
 
             # Explicitly instansiate the profiler class template
             f.write(f'template class {profiler};\n')
 
-            for i, tag in enumerate(tags.keys()):
+            for tag_idx, tag in enumerate(tags.keys()):
 
                 # Get the tag info
                 tag_info = tags[tag]
 
                 # Assign tag id
-                tag_info['id'] = i
+                tag_info['id'] = tag_idx
 
                 # Explicitly instansiate the tag class template
                 f.write(f'template class {profiler}::{tag};\n')
 
                 # Generate the to_id() function
                 f.write(
-                    f'\ntemplate<>\ntemplate<> std::size_t {profiler}::{tag}::to_id() const noexcept \n{{\n return {i}; \n}}\n\n')
+                    f'\ntemplate<>\ntemplate<> std::size_t {profiler}::{tag}::to_id() const noexcept \n{{\n return {tag_idx}; \n}}\n\n')
+            
+            # Create string literal array of tags
+            f.write(f'static constexpr std::string_view profiler_{profiler_idx}_tags[] = {{')
+            for tag_idx, tag in enumerate(tags.keys()):
+                f.write(f'"{tags[tag]["tag_name"]}"')
+                if tag_idx != len(tags.keys()) - 1:
+                    f.write(', ')
+            f.write('};\n\n')
+
+            f.write(f'template<>\nconst std::span<const std::string_view> {profiler}::tags(profiler_{profiler_idx}_tags,{len(tags.keys())});\n\n')
+
 
     # Generate JSON file containing the mapped strings
-    print(json.dumps(strings))
     with open(dumped_strings_fn.replace('.txt', '.json'), 'w') as f:
         f.write(json.dumps(strings))
 
