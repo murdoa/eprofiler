@@ -19,13 +19,13 @@ struct UniqueTypeInfo {
     }
 };
 
-template<UniqueTypeInfo UniqueInfo, class T>
-struct UniqueTypeWrapper : public T { };
-
 } // namespace internal
 } // namespace eprofiler
 
-// Must use macro on different lines to generate unique types
-#define EPROFILER_UNIQUE_TYPE(Type) eprofiler::internal::UniqueTypeWrapper<eprofiler::internal::UniqueTypeInfo{__FILE__, __LINE__}, Type>
+// Must use macro on different lines to generate unique types, type must take a UniqueTypeInfo as template parameter
+#define EPROFILER_UNIQUE_TYPE(Type) Type<eprofiler::internal::UniqueTypeInfo{__FILE__, __LINE__}>
+
+// Must use macro on different lines to generate unique types, type must take a UniqueTypeInfo as last template parameter
+#define EPROFILER_UNIQUE_TYPE_TMPL(Type, ...) Type<__VA_ARGS__, eprofiler::internal::UniqueTypeInfo{__FILE__, __LINE__}>
 
 #endif
