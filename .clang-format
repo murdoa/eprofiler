@@ -1,0 +1,14 @@
+BasedOnStyle: Webkit
+IndentWidth: 4
+BreakBeforeBraces: Custom
+
+BraceWrapping:
+  AfterEnum: false
+  AfterStruct: false
+  AfterFunction: false
+  SplitEmptyFunction: false
+
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: true
