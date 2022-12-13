@@ -15,3 +15,11 @@ TEST_CASE("Verify EPROFILER_GET_PROFILER", "[EProfiler]") {
     STATIC_REQUIRE(EPROFILER_GET_PROFILER("Profiler1").name() == "Profiler1");
     STATIC_REQUIRE(EPROFILER_GET_PROFILER("Profiler2").name() == "Profiler2");
 }
+
+
+TEST_CASE("Test StringConstant to ID conversion", "[EProfiler]") {
+    const auto profiler1 = EPROFILER_GET_PROFILER("Test-ID-Conversion");
+
+    REQUIRE( profiler1["0A"_sc] == 0 );
+    REQUIRE( profiler1["0B"_sc] == 1 );
+}
