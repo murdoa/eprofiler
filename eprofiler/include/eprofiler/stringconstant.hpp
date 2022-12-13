@@ -6,7 +6,7 @@
 namespace eprofiler {
 
 template <class CharT, CharT... Chars>
-class string_constant {
+class StringConstant {
     constexpr static CharT arr[sizeof...(Chars)] { Chars... };
 
 public:
@@ -22,7 +22,7 @@ namespace literals {
 
     // User-defined literal for string_constant
     template <class T, T... Chars>
-    constexpr string_constant<T, Chars...> operator""_sc() {
+    constexpr StringConstant<T, Chars...> operator""_sc() {
         return {};
     }
 
