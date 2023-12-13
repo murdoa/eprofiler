@@ -7,18 +7,21 @@ using namespace eprofiler::literals;
 
 TEST_CASE("Verify EPROFILER_GET_PROFILER", "[EProfiler]") {
 
+    eprofiler::EProfiler<"Profiler1", int> profiler1{};
+
     // Verify macro returns unqiue types
-    STATIC_REQUIRE(std::is_same_v<EPROFILER_GET_PROFILER_TYPE("Profiler1"), EPROFILER_GET_PROFILER_TYPE("Profiler1")>);
-    STATIC_REQUIRE(!std::is_same_v<EPROFILER_GET_PROFILER_TYPE("Profiler1"), EPROFILER_GET_PROFILER_TYPE("Profiler2")>);
+    STATIC_REQUIRE(std::is_same_v<eprofiler::EProfiler<"Profiler1", int>, eprofiler::EProfiler<"Profiler1", int>>);
+    STATIC_REQUIRE(std::is_same_v<eprofiler::EProfiler<"Profiler1", int>, eprofiler::EProfiler<"Profiler1", int>>);
+    STATIC_REQUIRE(!std::is_same_v<eprofiler::EProfiler<"Profiler1", int>, eprofiler::EProfiler<"Profiler2", int>>);
 
     // Verify macro returns EProfiler with correct name
-    STATIC_REQUIRE(EPROFILER_GET_PROFILER("Profiler1").name() == "Profiler1");
-    STATIC_REQUIRE(EPROFILER_GET_PROFILER("Profiler2").name() == "Profiler2");
+    STATIC_REQUIRE(eprofiler::EProfiler<"Profiler1", int>::name() == "Profiler1");
+    STATIC_REQUIRE(eprofiler::EProfiler<"Profiler2", int>::name() == "Profiler2");
 }
 
 
 TEST_CASE("Test StringConstant to ID conversion", "[EProfiler]") {
-    const auto profiler1 = EPROFILER_GET_PROFILER("Test-ID-Conversion");
+    const auto profiler1 = eprofiler::EProfiler<"Test-ID-Conversion", int>{};
 
     REQUIRE( profiler1["0A"_sc] == 0 );
     REQUIRE( profiler1["0B"_sc] == 1 );

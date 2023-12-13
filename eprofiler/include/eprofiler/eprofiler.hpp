@@ -2,12 +2,11 @@
 #define EPROFILER_EPROFILER_HPP
 
 #include <span>
-#include <eprofiler/stringconstant.hpp>
+#include <eprofiler/linktimehashtable.hpp>
 
 namespace eprofiler {
 
-namespace internal {
-
+namespace detail {
 
 template<std::size_t N>
 struct EProfilerName {
@@ -18,55 +17,29 @@ struct EProfilerName {
     }
 }; // struct EProfilerName
 
+} // namespace detail
 
-template<EProfilerName profilerName>
-class EProfiler {
+template<detail::EProfilerName profilerName, class T>
+class EProfiler : protected LinkTimeHashTable<EProfiler<profilerName, T>, T> {
 public:
-    // StringConstant is used to create unique string literal tags for each profiler
-    template<class CharT, CharT... Chars>
-    struct StringConstant_WithID : public StringConstant<CharT, Chars...> {
-        // declared in a generated translation unit
-        std::size_t to_id() const noexcept;
-    };
-
-    // Convert StringConstant to StringConstant_WithID
-    template<class CharT, CharT... Chars>
-    static StringConstant_WithID<CharT, Chars...> convert_string_constant(StringConstant<CharT, Chars...> const& sc) noexcept {
-        return StringConstant_WithID<CharT, Chars...>{sc};
-    }
-
-    const static std::span<const std::string_view> tags;
-
-private:
-
-    // Private functions operating on StringConstant_WithID tags
-
-    template<class CharT, CharT... Chars>
-    std::size_t operator[](StringConstant_WithID<CharT, Chars...> const& str) const noexcept {
-        return str.to_id();
-    }
-
-public:
-
-    constexpr std::string_view name() const noexcept {
+    constexpr static std::string_view name() noexcept {
         return profilerName.name;
     }
 
     // Public functions operating on StringConstant tags
     template<class CharT, CharT... Chars>
     std::size_t operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
-        return (*this)[convert_string_constant(str)];
+        return this->at(str);
     }
 
+    template<class CharT, CharT... Chars>
+    std::size_t get_id(StringConstant<CharT, Chars...> const& str) const noexcept {
+        return LinkTimeHashTable<EProfiler<profilerName, T>, T>::get_id(str);
+    }
 
 }; // class EProfiler
 
 
-
-} // namespace internal
 } // namespace eprofiler
-
-#define EPROFILER_GET_PROFILER_TYPE(name) eprofiler::internal::EProfiler<eprofiler::internal::EProfilerName{name}>
-#define EPROFILER_GET_PROFILER(name) EPROFILER_GET_PROFILER_TYPE(name){}
 
 #endif
