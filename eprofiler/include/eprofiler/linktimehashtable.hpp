@@ -6,15 +6,15 @@
 
 namespace eprofiler {
 
-// class T for use with CRTP
-template<class T, class ValueType>
+// class EProfilerTmpl to couple StringConstat_WithID with specific EProfiler
+template<class EProfilerTmpl, class IDType, class ValueType>
 class LinkTimeHashTable {
 public:
     // StringConstant is used to create unique string literal tags for each profiler
     template<class CharT, CharT... Chars>
     struct StringConstant_WithID : public StringConstant<CharT, Chars...> {
         // declared in a generated translation unit
-        std::size_t to_id() const noexcept;
+        IDType to_id() const noexcept;
     };
 
     // Convert StringConstant to StringConstant_WithID
@@ -43,7 +43,7 @@ public:
     }
 
     template<class CharT, CharT... Chars>
-    static std::size_t get_id(StringConstant<CharT, Chars...> const& str) noexcept {
+    static IDType get_id(StringConstant<CharT, Chars...> const& str) noexcept {
         return convert_string_constant(str).to_id();
     }
 

@@ -4,6 +4,7 @@ from lark import Tree
 
 import os
 import sys
+import json
 from itertools import chain
 
 # Hacked together parser for C++ symbols 
@@ -17,7 +18,8 @@ def read_file(filename) -> str:
 symbol_parser = Lark(r"""
     // Valid Type/Variable Names
     // begins with a letter, and can contain letters, digits, and underscores
-    valid_name: LETTER (LETTER | DIGIT | "_")*
+    // Exclamation mark is used to prevent filtering of underscore terminal
+    !valid_name: LETTER (LETTER | DIGIT | "_")*
 
 
     // Core Types
@@ -102,7 +104,10 @@ class CXXType:
 
         child_str = ''
         if self.parsed_child is not None:
-            child_str = f'::{self.parsed_child.to_cpp_string()}'
+            if type(self.parsed_child) == CXXType and self.parsed_child.is_template():
+                child_str = f'::template {self.parsed_child.to_cpp_string()}'
+            else:
+                child_str = f'::{self.parsed_child.to_cpp_string()}'
 
         member_str = ''
         if self.parsed_member is not None:
@@ -341,10 +346,7 @@ if __name__ == "__main__":
 
     hashtables = {}
 
-    root_node = { }
-
-
-    type_tree = TypeTree()
+    profiler_dict = {}
 
     # Parse the dumped symbols
     with open(dumped_strings_fn, 'r') as f:
@@ -359,8 +361,41 @@ if __name__ == "__main__":
 
             parsed_symbol = SymbolsTransformer().transform(symbol)
 
-            type_tree.register_type(parsed_symbol)
+            profiler_name_literal = parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0]
+            profiler_name_char_init_list = profiler_name_literal.literal_value.values[0].literal_value.values
+            profiler_name = ''.join([ chr(x.literal_value) for x in profiler_name_char_init_list])
 
-    print_type_tree(type_tree)
+            if profiler_name not in profiler_dict:
+                profiler_dict[profiler_name] = {}
 
-    sys.exit(1)
+            parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0] = CXXLiteral(None, 'string', '"' + profiler_name + '"')
+            return_type = parsed_symbol.parsed_child.template_args[1].to_cpp_string()
+
+            tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
+            profiler_dict[profiler_name][tag_name] = {
+                'func_sig': f"template<>\ntemplate<>\n{return_type} {parsed_symbol.to_cpp_string()} noexcept",
+            }
+
+    # Attach "hashes" to the tags
+    count = 1
+    for profiler_name, tags in profiler_dict.items():
+        for tag_name, tag_data in tags.items():
+            tag_data['hash'] = count
+            count += 1
+
+    
+    hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_tags.items()} for profiler_name, profiler_tags in profiler_dict.items()  }
+    with open(f'{output_fn}.json', 'w') as outf:
+        outf.write(json.dumps(hash_info, indent=4))
+
+    with open(output_fn, 'w') as outf:
+        outf.write('#include <eprofiler/eprofiler.hpp>\n')
+        for profiler_name, tags in profiler_dict.items():
+            for tag_name, tag_data in tags.items():
+                outf.write(tag_data['func_sig'])
+                outf.write('{\n')
+                outf.write(f'    return {tag_data["hash"]};\n')
+                outf.write('}\n\n') 
+
+
+    sys.exit(0)

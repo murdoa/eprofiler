@@ -1,8 +1,14 @@
 #ifndef EPROFILER_EPROFILER_HPP
 #define EPROFILER_EPROFILER_HPP
 
+#include <algorithm>
 #include <span>
+
+class EProfiler;
+
 #include <eprofiler/linktimehashtable.hpp>
+
+#include "stringconstant.hpp"
 
 namespace eprofiler {
 
@@ -19,22 +25,24 @@ struct EProfilerName {
 
 } // namespace detail
 
-template<detail::EProfilerName profilerName, class T>
-class EProfiler : protected LinkTimeHashTable<EProfiler<profilerName, T>, T> {
+template<detail::EProfilerName ProfilerName, class IDTypeT, class ValueType>
+class EProfiler : protected LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType> {
 public:
+    using IDType = IDTypeT;
+
     constexpr static std::string_view name() noexcept {
-        return profilerName.name;
+        return ProfilerName.name;
     }
 
     // Public functions operating on StringConstant tags
     template<class CharT, CharT... Chars>
-    std::size_t operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
+    IDType operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
         return this->at(str);
     }
 
     template<class CharT, CharT... Chars>
-    std::size_t get_id(StringConstant<CharT, Chars...> const& str) const noexcept {
-        return LinkTimeHashTable<EProfiler<profilerName, T>, T>::get_id(str);
+    IDType get_id(StringConstant<CharT, Chars...> const& str) const noexcept {
+        return LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType>::get_id(str);
     }
 
 }; // class EProfiler

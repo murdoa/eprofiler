@@ -1,4 +1,4 @@
-#include <iostream>
+// #include <iostream>
 
 #include <eprofiler/eprofiler.hpp>
 
@@ -11,13 +11,13 @@ int app(int argc, char *argv[]) {
 
 
 
-    const auto profiler = eprofiler::EProfiler<"Profiler", int>{};
+    const auto profiler = eprofiler::EProfiler<"Profiler", int, int>{};
 
-    std::cout << "ID: " << profiler.get_id("Test"_sc) << "\n";
-    std::cout << "ID: " << profiler.get_id("Test1"_sc) << "\n";
-    std::cout << "ID: " << profiler.get_id("Test2"_sc) << "\n";
-    std::cout << "ID: " << profiler.get_id("Test3"_sc) << "\n";
+    // std::cout << "ID: " << profiler.get_id("Test"_sc) << "\n";
+    // std::cout << "ID: " << profiler.get_id("Test1"_sc) << "\n";
+    // std::cout << "ID: " << profiler.get_id("Test2"_sc) << "\n";
+    // std::cout << "ID: " << profiler.get_id("Test3"_sc) << "\n";
 
 
-    return 0;
+    return profiler.get_id("Test"_sc);
 }

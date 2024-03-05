@@ -99,6 +99,22 @@ enable_doxygen()
 # setup static analysis tools if enabled
 include(cmake/StaticAnalyzers.cmake)
 
+###############################################
+#  🚀 Enable Link Time Optimization Globally  #
+###############################################
+
+# Warning all targets created after this will have LTO enabled
+# Include libraries before if you want to disable LTO for them
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT lto_supported OUTPUT lto_error)
+if(lto_supported)
+    message(STATUS "LTO supported and enabled.")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+else()
+    message(WARNING "LTO not supported: <${lto_error}>")
+endif()
+
 ####################################
 #  🛠️ Add CMake targets for build  #
 ####################################

@@ -46,6 +46,5 @@ function(REGISTER_EPROFILER_TARGET)
     add_library(${EPROFILE_TARGET_GEN} OBJECT ${CMAKE_CURRENT_BINARY_DIR}/${EPROFILE_INTERMEDIATE_TARGET}_gen.cpp)
     target_link_libraries(${EPROFILE_TARGET_GEN} PRIVATE eprofiler_base)
 
-
-
 endfunction()
+
