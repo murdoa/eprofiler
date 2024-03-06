@@ -9,6 +9,8 @@ namespace eprofiler {
 // class EProfilerTmpl to couple StringConstat_WithID with specific EProfiler
 template<class EProfilerTmpl, class IDType, class ValueType>
 class LinkTimeHashTable {
+    static_assert(std::is_integral_v<IDType>, "IDType must be an integral type");
+    
 public:
     // StringConstant is used to create unique string literal tags for each profiler
     template<class CharT, CharT... Chars>
@@ -24,6 +26,7 @@ public:
     }
 
     // Key value storage externally defined in a generated translation unit
+    const static IDType offset;
     const static std::span<const std::string_view> keys;
     const static std::span<ValueType> value_store;
 
@@ -51,7 +54,6 @@ public:
 
 
 } // namespace eprofiler
-
 
 
 #endif

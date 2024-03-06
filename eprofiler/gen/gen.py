@@ -1,4 +1,6 @@
 import argparse
+import copy
+import hashlib
 import json
 import os
 import sys
@@ -564,7 +566,6 @@ if __name__ == "__main__":
     # nm -u <static_lib_fn> dumps the unresolved symbols from the static library
     # c++filt demangles the symbols providing consistent names across platforms/abis
     # grep eprofiler to filter to only eprofiler symbols
-    # grep ::to_id to filter to only the to_id functions
     # TODO: move to use subprocess with piped stdout and stderr and detect failure
     dumped_strings_fn = f'{output_fn}.txt'
     os.system(f'nm -u {static_lib_fn} | c++filt | grep eprofiler | grep ::to_id > {dumped_strings_fn}')
@@ -589,44 +590,74 @@ if __name__ == "__main__":
             profiler_name_literal = parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0]
             profiler_name_char_init_list = profiler_name_literal.literal_value.values[0].literal_value.values
             profiler_name = ''.join([ chr(x.literal_value) for x in profiler_name_char_init_list]) # 
+            # Replace the char array with a string literal
+            parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0] = CXXLiteral(None, 'string', '"' + profiler_name + '"')
+
+            # Extract return and value type from eprofiler template args
+            keytype = parsed_symbol.parsed_child.template_args[1].to_cpp_string()
+            valuetype = parsed_symbol.parsed_child.template_args[2].to_cpp_string()
 
             # Register the profiler if first time seen
             if profiler_name not in registered_profilers:
                 registered_profilers[profiler_name] = {}
 
+                hashtable_type = copy.deepcopy(parsed_symbol)
+                hashtable_type.parsed_member = None
+                hashtable_type.parsed_child.parsed_child = None
+
+                registered_profilers[profiler_name]['tags'] = {}
+                registered_profilers[profiler_name]['hashtable_type'] = hashtable_type
+                registered_profilers[profiler_name]['key_type'] = keytype
+                registered_profilers[profiler_name]['value_type'] = valuetype
+
+                # Generate UUID
+                sha256 = hashlib.new('sha256')
+                sha256.update(profiler_name.encode('utf-8'))
+                uuid = sha256.hexdigest()
+                registered_profilers[profiler_name]['uuid'] = f'{uuid}'
             
-            # Replace the char array with a string literal
-            parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0] = CXXLiteral(None, 'string', '"' + profiler_name + '"')
-            # Extract return type from eprofiler template args
-            return_type = parsed_symbol.parsed_child.template_args[1].to_cpp_string()
 
             tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
-            registered_profilers[profiler_name][tag_name] = {
-                'func_sig': f"template<>\ntemplate<>\n{return_type} {parsed_symbol.to_cpp_string()} noexcept",
+            registered_profilers[profiler_name]['tags'][tag_name] = {
+                'parsed_symbol': parsed_symbol,
             }
 
     # Attach "hashes" to the tags
     count = 1
-    for profiler_name, tags in registered_profilers.items():
-        for tag_name, tag_data in tags.items():
+    for profiler_name, profiler_data in registered_profilers.items():
+        profiler_data['offset'] = count
+        for tag_name, tag_data in profiler_data['tags'].items():
             tag_data['hash'] = count
             count += 1
 
-    
-    hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_tags.items()} for profiler_name, profiler_tags in registered_profilers.items()  }
+    hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_data['tags'].items()} for profiler_name, profiler_data in registered_profilers.items()  }
     with open(f'{output_fn}.json', 'w') as outf:
         outf.write(json.dumps(hash_info, indent=4))
 
     print(hash_info)
 
     with open(output_fn, 'w') as outf:
-        outf.write('#include <eprofiler/eprofiler.hpp>\n')
-        for profiler_name, tags in registered_profilers.items():
-            for tag_name, tag_data in tags.items():
-                outf.write(tag_data['func_sig'])
+        outf.write('#include <array>\n#include <eprofiler/eprofiler.hpp>\n')
+
+        for profiler_name, profiler_data in registered_profilers.items():
+
+            for tag_name, tag_data in profiler_data['tags'].items():
+                func_sig = f"template<>\ntemplate<>\n{profiler_data['key_type']} {tag_data['parsed_symbol'].to_cpp_string()} noexcept"
+
+                outf.write(func_sig)
                 outf.write('{\n')
                 outf.write(f'    return {tag_data["hash"]};\n')
                 outf.write('}\n\n') 
+
+            outf.write(f'template<>\nconst {profiler_data["key_type"]} {profiler_data["hashtable_type"].to_cpp_string()}::offset = {profiler_data["offset"]};\n')
+
+            outf.write(f'std::array<{profiler_data["value_type"]}, {len(profiler_data["tags"])}> eprofiler_{profiler_data["uuid"]}_value_store = {{}};')
+            outf.write(f'template<>\nconst std::span<{profiler_data["value_type"]}> {profiler_data["hashtable_type"].to_cpp_string()}::value_store = std::span{{ eprofiler_{profiler_data["uuid"]}_value_store }};\n')
+
+            
+
+
+            
 
 
     sys.exit(0)

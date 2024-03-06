@@ -29,20 +29,25 @@ template<detail::EProfilerName ProfilerName, class IDTypeT, class ValueType>
 class EProfiler : protected LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType> {
 public:
     using IDType = IDTypeT;
+    using LinkTimeHashTableT = LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType>;
 
     constexpr static std::string_view name() noexcept {
         return ProfilerName.name;
     }
 
+    static IDType get_offset() noexcept {
+        return LinkTimeHashTableT::offset;
+    }
+
     // Public functions operating on StringConstant tags
     template<class CharT, CharT... Chars>
-    IDType operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
+    ValueType& operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
         return this->at(str);
     }
 
     template<class CharT, CharT... Chars>
     IDType get_id(StringConstant<CharT, Chars...> const& str) const noexcept {
-        return LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType>::get_id(str);
+        return LinkTimeHashTableT::get_id(str);
     }
 
 }; // class EProfiler

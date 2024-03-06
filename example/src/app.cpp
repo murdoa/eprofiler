@@ -6,18 +6,10 @@
 
 using namespace eprofiler::literals;
 
-
 int app(int argc, char *argv[]) {
-
-
-
     const auto profiler = eprofiler::EProfiler<"Profiler", int, int>{};
 
-    // std::cout << "ID: " << profiler.get_id("Test"_sc) << "\n";
-    // std::cout << "ID: " << profiler.get_id("Test1"_sc) << "\n";
-    // std::cout << "ID: " << profiler.get_id("Test2"_sc) << "\n";
-    // std::cout << "ID: " << profiler.get_id("Test3"_sc) << "\n";
+    profiler["Test"_sc] = 5;
 
-
-    return profiler.get_id("Test"_sc);
+    return profiler["Test"_sc];
 }
