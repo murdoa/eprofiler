@@ -1,19 +1,14 @@
-from lark import Lark
-from lark import Transformer
-from lark import Tree
-
+import argparse
+import json
 import os
 import sys
-import json
 from itertools import chain
+from typing import Union
+
+from lark import Lark, Transformer, Tree
 
 # Hacked together parser for C++ symbols 
 # This is not a complete parser only written to parse the symbols currently produced by eprofiler
-
-
-def read_file(filename) -> str:
-    with open(filename, 'r') as f:
-        return f.read()
 
 symbol_parser = Lark(r"""
     // Valid Type/Variable Names
@@ -33,15 +28,14 @@ symbol_parser = Lark(r"""
     template_argument: (literal_value |  scoped_type )
     template_argument_pack: "<" (template_argument  "," WS )* template_argument ">"
 
-
     // Literals 
     integer_literal: SIGNED_NUMBER /(?:ull|ll|ul|l|u)/i?
     string_literal_suffix: [ "_" valid_name ]
     string_literal: ESCAPED_STRING string_literal_suffix
-    initalizer_list: "{" (literal_value "," WS)* [literal_value] "}"
+    initializer_list: "{" (literal_value "," WS)* [literal_value] "}"
 
     cast_cstyle: "(" any_type ")"
-    literal_value: [cast_cstyle] (integer_literal | string_literal | (scoped_type initalizer_list)) [WS]
+    literal_value: [cast_cstyle] (integer_literal | string_literal | (scoped_type initializer_list)) [WS]
 
     // CV Qualifiers
     cv_qualifier: /const/ | /volatile/
@@ -64,24 +58,48 @@ symbol_parser = Lark(r"""
 
 
 class CXXMember:
+    """
+    Represents C++ member functions and variables.
+    """
+
     TYPE_FUNC = 0
     TYPE_VAR = 1
-    def __init__(self, name, type, cv_qualifiers):
+
+    def __init__(self, name : str, mem_type : int, cv_qualifiers : str):
+        """
+        Parameters
+            name : str -> Name of the member
+            mem_type : int -> Type of the member (CXXMember.TYPE_FUNC, CXXMember.TYPE_VAR)
+            cv_qualifiers : str -> CV Qualifiers
+        """
         self.name = name
-        self.type = type
+        self.type = mem_type
         self.cv_qualifiers = cv_qualifiers
 
-    def to_cpp_string(self):
+    def to_cpp_string(self) -> str:
+        """
+        Returns
+            str -> C++ string representation of the member
+        """
         function_sig = ''
         if self.type == CXXMember.TYPE_FUNC:
             function_sig = '()'
         return f'{self.name}{function_sig} {" ".join(self.cv_qualifiers)}'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'CXXMember: ({self.to_cpp_string()})'
 
 class CXXType:
-    def __init__(self, name, template_args=[]):
+    """
+    Represents C++ types and namespaces.
+    """
+
+    def __init__(self, name : str, template_args : list =[]):
+        """
+        Parameters
+            name : str -> Name of the type
+            template_args : list -> List of template arguments
+        """
         self.name = name
         self.template_args = template_args
         self.parsed_child = None
@@ -90,20 +108,33 @@ class CXXType:
         if self.template_args is None:
             self.template_args = []
 
-    def is_template(self):
+    def is_template(self) -> bool:
+        """
+        Returns
+            bool -> True if the type is a template
+        """
         return len(self.template_args) != 0
 
-    def to_cpp_string_template(self):
+    def to_cpp_string_template(self) -> str:
+        """
+        Returns
+            str -> C++ string representation of the template arguments
+        """
         template_args_str = ''
         if len(self.template_args) != 0:
             template_args_str = '<' + ', '.join([ x.to_cpp_string() for x in self.template_args]) + '>'
         return template_args_str
 
-    def to_cpp_string(self):
+    def to_cpp_string(self) -> str:
+        """
+        Returns
+            str -> C++ string representation of the type
+        """
         template_args_str = self.to_cpp_string_template()
 
         child_str = ''
         if self.parsed_child is not None:
+            # If the child is a template type, we need to add the template keyword
             if type(self.parsed_child) == CXXType and self.parsed_child.is_template():
                 child_str = f'::template {self.parsed_child.to_cpp_string()}'
             else:
@@ -119,25 +150,59 @@ class CXXType:
         return f'CXXType: ({self.to_cpp_string()})'
 
 class CXXArrType(CXXType):
+    """
+    Represents C++ array types.
+    """
+
     def __init__(self, name, template_args, size):
+        """
+        Parameters
+            name : str -> Name of the type
+            template_args : list -> List of template arguments
+            size : int -> Size of the array
+        """
         super().__init__(name, template_args)
         self.size = size
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'CXXArrType: ({self.to_cpp_string()})'
 
-class CXXInitalizerList:
+class CXXInitializerList:
+    """
+    Represents C++ initializer lists.
+    """
+
     def __init__(self, values):
+        """
+        Parameters
+            values : list -> List of values in the initializer list
+        """
         self.values = list(values)
 
-    def to_cpp_string(self):
+    def to_cpp_string(self) -> str:
+        """
+        Returns
+            str -> C++ string representation of the initializer list
+        """
         return '{' + ', '.join([x.to_cpp_string() for x in self.values]) + '}'
 
-    def __repr__(self):
-        return f'CXXInitalizerList: ({self.to_cpp_string()})'
+    def __repr__(self) -> str:
+        return f'CXXInitializerList: ({self.to_cpp_string()})'
 
 class CXXLiteral:
-    def __init__(self, cast, literal_type, literal_value, suffix=None):
+    """
+    Represents C++ literals, describes the type and value of the literal.
+    """
+
+    def __init__(self, cast : CXXType, literal_type : CXXType, literal_value, suffix=None):
+        """
+        Parameters
+            cast : CXXType -> Cast type
+            literal_type : CXXType -> Type of the literal
+            literal_value -> Value of the literal
+            suffix : str -> Suffix of the literal
+        """
+
         self.casts = []
         self.literal_type = literal_type
         self.literal_value = literal_value
@@ -146,10 +211,19 @@ class CXXLiteral:
         if cast:
             self.casts.append(cast)
 
-    def add_cast(self, cast):
+    def add_cast(self, cast : CXXType):
+        """
+        Add a cast to the literal.
+        Parameters
+            cast : CXXType -> Cast type
+        """
         self.casts.append(cast)
 
-    def to_cpp_string(self):
+    def to_cpp_string(self) -> str:
+        """
+        Returns
+            str -> C++ string representation of the literal
+        """
         suffix = self.suffix if self.suffix else ''
 
         casts = ''
@@ -160,109 +234,279 @@ class CXXLiteral:
 
         literal_value = self.literal_value.to_cpp_string() if hasattr(self.literal_value, 'to_cpp_string') else self.literal_value
 
-        if isinstance(self.literal_value,CXXInitalizerList):
+        if isinstance(self.literal_value,CXXInitializerList):
             if not isinstance(self.literal_type, CXXArrType):
                 literal_type = self.literal_type.to_cpp_string()
 
         return f'{casts}{literal_type}{literal_value}{suffix}'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'CXXLiteral: ({self.to_cpp_string()})'
 
 
 
 class SymbolsTransformer(Transformer):
+    """
+    Lark transformer for parsing C++ symbols.
+    """
+
     # Helper non parsing functions
-    def remove_nones(self, items):
+
+    def remove_nones(self, items) -> list:
+        """
+        Removes None values from a list.
+
+        Parameters
+            items : list -> List of items
+        Returns
+            list -> List of items with None values removed
+        """
         return list(filter(lambda x: x, items))
 
-    def chain_types(self, type_chain):
+    def chain_types(self, type_chain) -> CXXType:
+        """
+        Chains a list of types together.
+
+        Parameters
+            type_chain : list -> List of types
+        Returns
+            CXXType -> The main type of the chain
+        """
+
         main_type = type_chain[-1]
         for i in range(len(type_chain)-2, -1, -1):
             type_chain[i].parsed_child = main_type
             main_type = type_chain[i]
         return main_type
 
-    # Handle basic joining of letters and digits
-    def LETTER(self, items):
-        return items[0]
+    def LETTER(self, items : list) -> str:
+        """
+        Transforms LETTER terminal to a string.
 
-    def valid_name_impl(self, items):
-        return ''.join(self.remove_nones(items))
+        Parameters
+            items : list -> Parsed terminal list containing LETTER 
+        Returns
+            str -> The parsed letter
+        """
+        return str(items[0])
 
-    def valid_name(self, items):
+    def valid_name(self, items : list) -> str:
+        """
+        Transforms of valid_name symbol to string.
+
+        Parameters
+            items : list -> Parsed symbol list containing LETTER (LETTER | DIGIT | "_")* 
+        Returns
+            str -> The parsed name
+        """
         name =  ''.join(self.remove_nones(items))
         return name
 
-    def WORD(self, items):
+    def WORD(self, items : list) -> str:
+        """
+        Transforms WORD terminal to a string.
+
+        Parameters
+            items : list -> Parsed terminal list containing WORD
+        Returns
+            str -> The parsed word
+        """
         return str(items)
 
-    # Map whitespace to None
-    def WS(self, items):
+    def WS(self, items : list) -> None:
+        """
+        Transforms whitespace (maps to None).
+
+        Parameters
+            items : list -> Parsed whitespace
+        Returns
+            None
+        """
         return None
 
-    # Namespaces
-    def namespace(self, items):
+    def namespace(self, items : list) -> str:
+        """
+        Transforms namespace symbol to string.
+
+        Parameters
+            items : list -> Parsed symbol list containing valid_name
+        Returns
+            str -> The parsed namespace
+        """
         return items[0]
 
-    def namespaces(self, items):
+    def namespaces(self, items: list) -> list:
+        """
+        Transforms namespaces symbol to a list of namespaces.
+
+        Parameters
+            items : list -> Parsed list of namespaces
+        Returns
+            list -> List of namespaces
+        """
         return items
 
-    # C style casts
-    def cast_cstyle(self, items):
+    def cast_cstyle(self, items: list) -> CXXType:
+        """
+        Transforms C-style casts to CXXType.
+
+        Parameters
+            items : list -> Parsed list of types
+        Returns
+            CXXType -> The parsed type
+        """
         return items[0]
 
     # Literals
-    def integer_literal(self, items):
+    def integer_literal(self, items : list) -> CXXLiteral:
+        """
+        Transforms integer literals to CXXLiteral.
+
+        Parameters
+            items : list -> Parsed list of integer literals
+        Returns
+            CXXLiteral -> The parsed literal
+        """
+
         suffix = None
         if len(items) > 1:
             suffix = items[1].value
         return CXXLiteral(None, 'integer', int(items[0].value), suffix)
 
-    def string_literal(self, items):
+    def string_literal(self, items : list) -> CXXLiteral:
+        """
+        Transforms string literals to CXXLiteral.
+
+        Parameters
+            items : list -> Parsed list of string literals
+        Returns
+            CXXLiteral -> The parsed literal
+        """
         string, suffix = items
         return CXXLiteral(None, 'string', string, suffix)
 
-    def literal_value(self, items):
+    def literal_value(self, items: list) -> CXXLiteral:
+        """
+        Transforms literal values to CXXLiteral.
+
+        Parameters
+            items : list -> Parsed list of literal values
+        Returns
+            CXXLiteral -> The parsed literal
+        """
+
         if isinstance(items[1], CXXLiteral):
             if items[0]:
                 items[1].add_cast(items[0])
             return items[1]
 
-        if isinstance(items[-2], CXXInitalizerList):
+        if isinstance(items[-2], CXXInitializerList):
             return CXXLiteral(*items)
 
-        return items
+        raise Exception('Unhandled literal value type')
 
-    # Template arguments
-    def template_argument(self, items):
+    def template_argument(self, items : list) -> Union[CXXType,  CXXLiteral]:
+        """
+        Transforms template arguments to CXXType.
+
+        Parameters
+            items : list -> Parsed list of template arguments
+        Returns
+            CXXType or CXXLiteral -> The parsed type or literal
+        """
         return self.remove_nones(items)[0]
 
-    def template_argument_pack(self, items):
+    def template_argument_pack(self, items : list) -> list:
+        """
+        Transforms template argument packs to a list of template arguments.
+
+        Parameters
+            items : list -> Parsed list of template argument packs with None terminals included
+        Returns
+            list -> List of template arguments
+        """
         return self.remove_nones(items)
 
-    def type(self, items): # items = [ name, template_args]
+    def type(self, items : list) -> CXXType: 
+        """
+        Transforms type to CXXType.
+
+        Parameters
+            items : list -> [ name, template_args ]
+        Returns
+            CXXType -> The parsed type
+        """
         return CXXType(*items)
 
-    def array_type(self,items): 
+    def array_type(self, items : list) -> CXXArrType: 
+        """
+        Transforms array type to CXXArrType.
+
+        Parameters
+            items : list -> [ type, None, size, None ]
+        Returns
+            CXXArrType -> The parsed array type
+        """
         return CXXArrType(items[0].name, [], items[2])
 
-    def any_type(self, items): 
+    def any_type(self, items: list) -> CXXType: 
+        """
+        Transforms any_type to CXXType.
+
+        Parameters
+            items : list -> [ type | array_type ]
+        Returns
+            CXXType -> The parsed type
+        """
         return items[0]
 
     # Initializer list
-    def initalizer_list(self, items): 
-        return CXXInitalizerList(filter(lambda x: x, items))
+    def initializer_list(self, items : list) -> CXXInitializerList: 
+        """
+        Transforms initializer list to CXXInitializerList.
+
+        Parameters
+            items : list -> List of literal values including None terminals
+        Returns
+            CXXInitializerList -> The parsed initializer list
+        """
+        return CXXInitializerList(filter(lambda x: x, items))
 
     # Function Signatures
-    def function_sig(self, items):
+    def function_sig(self, items : list) -> list:
+        """
+        Transforms function signatures to a list of function parameters.
+        Only handles no parameter functions for now.
+
+        Parameters
+            items : list -> Parsed list of function parameters including None terminals 
+        Returns
+            list -> List of function signatures
+        """
         return self.remove_nones(items)
 
-    def scoped_type(self, items):
+    def scoped_type(self, items: list) -> CXXType:
+        """
+        Transforms scoped types to CXXType.
+
+        Parameters
+            items : list -> Parsed list of namespaces with a type at the end
+
+        Returns
+            CXXType -> The parsed type
+        """
         return self.chain_types(items)
 
-    # Static Members
-    def static_member(self, items): # items = [type, name, is_function, WS, cv_qualifiers]
+    def static_member(self, items : list) -> CXXType:
+        """
+        Transforms static members to CXXType.
+
+        Parameters
+            items : list -> Parsed list containing [type, name, is_function, WS, cv_qualifiers]
+        Returns
+            CXXType -> The parsed type
+        """
+
         main_type = self.chain_types(items[:len(items)-4])
         member_type = CXXMember.TYPE_VAR
         if items[-3][0].value == '()':
@@ -270,127 +514,114 @@ class SymbolsTransformer(Transformer):
         main_type.parsed_member = CXXMember(items[-4], member_type, items[-1])
         return main_type
 
-    # CV Qualifiers 
-    def cv_qualifier(self, items): 
+    def cv_qualifier(self, items : list) -> str: 
+        """
+        Transforms cv_qualifier token to a string.
+
+        Parameters
+            items : list -> Parsed list containing cv_qualifier
+        Returns
+            str -> The parsed cv_qualifier
+        """
         return items[0].value
 
-    def cv_qualifiers(self, items):
+    def cv_qualifiers(self, items : list) -> list:
+        """
+        Transforms cv_qualifiers token to a list of cv_qualifiers.
+
+        Parameters
+            items : list -> Parsed list of cv_qualifiers including None terminals
+        Returns
+            list -> List of cv_qualifiers
+        """
         return self.remove_nones(items)
 
-
-class TypeTree:
-    def __init__(self):
-        self.types = {}
-        self.template_instances = set()
-
-    def register_type(self, parsed_type, root=None):
-        if root is None:
-            root = self
-
-        if isinstance(parsed_type, CXXLiteral):
-            if isinstance(parsed_type.literal_type, CXXType):
-                root.register_type(parsed_type.literal_type, root=root)
-            return
-
-        type_entry = (parsed_type.name, None)
-        if parsed_type.is_template():
-            type_entry = (parsed_type.name, parsed_type.to_cpp_string_template())
-
-        if type_entry not in self.types.keys():
-            self.types[type_entry] = TypeTree()
-
-        for type in parsed_type.template_args:
-            root.register_type(type, root=root)
-
-        if parsed_type.parsed_child is not None:
-            self.types[type_entry].register_type(parsed_type.parsed_child, root=root)
-
-
-def print_type_tree(type_tree, parent=''):
-    if type_tree is None:
-        return
-
-    keys_sorted = sorted(type_tree.types.keys(), key=lambda key: len(type_tree.types[key].types))
-
-    non_templates = filter(lambda key: key[1] is None, keys_sorted)
-    templates = filter(lambda key: key[1] is not None, keys_sorted)
-
-    keys_sorted = chain(non_templates, templates)
-
-    for type_name in keys_sorted:
-        type_data = type_tree.types[type_name]
-
-        name = parent
-        if type_name[0] is not None:
-            name += type_name[0]
-        if type_name[1] is not None:
-            name += type_name[1]
-        name
-        print(name)
-        print_type_tree(type_data, parent=name + '::')
-
 if __name__ == "__main__":
-    # Check arguments
-    if len(sys.argv) <= 2:
-        print("Usage: gen.py <output_fn> <static_lib_fn>")
+    # Setup argument parser
+    parser = argparse.ArgumentParser(
+                    prog='gen.py',
+                    description='Generates a C++ file with the unresolved symbols from a static library mapping to unique ids.'
+    )
+
+    parser.add_argument('output_fn', type=str, help='Output file name')
+    parser.add_argument('static_lib_fn', type=str, help='Static library file name')
+
+    # Parse and unpack arguments
+    args = parser.parse_args()
+    output_fn = args.output_fn
+    static_lib_fn = args.static_lib_fn
+
+    print(f'Generating file: {output_fn} from static library: {static_lib_fn}')
+
+    # Validate file path
+    if not os.path.exists(static_lib_fn):
+        print(f'Error: {static_lib_fn} does not exist')
         sys.exit(1)
 
-    # Unpack arguments
-    output_fn = sys.argv[1]
-    static_lib_fn = sys.argv[2]
-
-    dumped_strings_fn = f'{output_fn}.txt'
 
     # Dump unresolved symbols from static library
+    # Hacky way to get the unresolved symbols from the static library better methods exist
+    # nm -u <static_lib_fn> dumps the unresolved symbols from the static library
+    # c++filt demangles the symbols providing consistent names across platforms/abis
+    # grep eprofiler to filter to only eprofiler symbols
+    # grep ::to_id to filter to only the to_id functions
+    # TODO: move to use subprocess with piped stdout and stderr and detect failure
+    dumped_strings_fn = f'{output_fn}.txt'
     os.system(f'nm -u {static_lib_fn} | c++filt | grep eprofiler | grep ::to_id > {dumped_strings_fn}')
 
-    hashtables = {}
-
-    profiler_dict = {}
+    # Dictionary to store the registered profilers and their tags
+    registered_profilers = {}
 
     # Parse the dumped symbols
     with open(dumped_strings_fn, 'r') as f:
         for line in f.readlines():
+            # Remove the 'U ' prefix from the line
             line_start_idx = line.find('U ')
             if line_start_idx == -1 or len(line) - line_start_idx < 3 :
                 raise Exception(f'Invalid symbol line: {line}')
-
             line = line[line_start_idx+2:].strip()
 
+            # Parse and transform line using Lark parser and transformer
             symbol = symbol_parser.parse(line)
-
             parsed_symbol = SymbolsTransformer().transform(symbol)
 
+            # Extract the profiler name and tag name from the parsed symbol
             profiler_name_literal = parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0]
             profiler_name_char_init_list = profiler_name_literal.literal_value.values[0].literal_value.values
-            profiler_name = ''.join([ chr(x.literal_value) for x in profiler_name_char_init_list])
+            profiler_name = ''.join([ chr(x.literal_value) for x in profiler_name_char_init_list]) # 
 
-            if profiler_name not in profiler_dict:
-                profiler_dict[profiler_name] = {}
+            # Register the profiler if first time seen
+            if profiler_name not in registered_profilers:
+                registered_profilers[profiler_name] = {}
 
+            
+            # Replace the char array with a string literal
             parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0] = CXXLiteral(None, 'string', '"' + profiler_name + '"')
+            # Extract return type from eprofiler template args
             return_type = parsed_symbol.parsed_child.template_args[1].to_cpp_string()
 
             tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
-            profiler_dict[profiler_name][tag_name] = {
+            registered_profilers[profiler_name][tag_name] = {
                 'func_sig': f"template<>\ntemplate<>\n{return_type} {parsed_symbol.to_cpp_string()} noexcept",
             }
 
     # Attach "hashes" to the tags
     count = 1
-    for profiler_name, tags in profiler_dict.items():
+    for profiler_name, tags in registered_profilers.items():
         for tag_name, tag_data in tags.items():
             tag_data['hash'] = count
             count += 1
 
     
-    hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_tags.items()} for profiler_name, profiler_tags in profiler_dict.items()  }
+    hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_tags.items()} for profiler_name, profiler_tags in registered_profilers.items()  }
     with open(f'{output_fn}.json', 'w') as outf:
         outf.write(json.dumps(hash_info, indent=4))
 
+    print(hash_info)
+
     with open(output_fn, 'w') as outf:
         outf.write('#include <eprofiler/eprofiler.hpp>\n')
-        for profiler_name, tags in profiler_dict.items():
+        for profiler_name, tags in registered_profilers.items():
             for tag_name, tag_data in tags.items():
                 outf.write(tag_data['func_sig'])
                 outf.write('{\n')
