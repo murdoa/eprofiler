@@ -47,7 +47,7 @@ symbol_parser = Lark(r"""
     function_sig: /\(\)/
 
     // Static Members
-    static_member: (any_type "::")+ valid_name function_sig? WS? [cv_qualifiers]
+    static_member: (any_type "::")+ valid_name [function_sig] [WS] [cv_qualifiers]
 
     %import common.LETTER
     %import common.DIGIT
@@ -56,7 +56,7 @@ symbol_parser = Lark(r"""
     %import common.SIGNED_NUMBER
     %import common.WS
     
-    """, start='static_member', parser='lalr')
+    """, start='static_member', parser='lalr', maybe_placeholders=True)
 
 
 class CXXMember:
@@ -67,12 +67,12 @@ class CXXMember:
     TYPE_FUNC = 0
     TYPE_VAR = 1
 
-    def __init__(self, name : str, mem_type : int, cv_qualifiers : str):
+    def __init__(self, name : str, mem_type : int, cv_qualifiers : list):
         """
         Parameters
             name : str -> Name of the member
             mem_type : int -> Type of the member (CXXMember.TYPE_FUNC, CXXMember.TYPE_VAR)
-            cv_qualifiers : str -> CV Qualifiers
+            cv_qualifiers : list -> CV qualifiers as strings
         """
         self.name = name
         self.type = mem_type
@@ -274,6 +274,12 @@ class SymbolsTransformer(Transformer):
         Returns
             CXXType -> The main type of the chain
         """
+
+        if len(type_chain) == 0:
+            return None
+
+        if len(type_chain) == 1:
+            return type_chain[0]
 
         main_type = type_chain[-1]
         for i in range(len(type_chain)-2, -1, -1):
@@ -509,12 +515,23 @@ class SymbolsTransformer(Transformer):
             CXXType -> The parsed type
         """
 
-        main_type = self.chain_types(items[:len(items)-4])
+        # (any_type "::")+ valid_name [function_sig] [WS] [cv_qualifiers]
+
+        cxx_type = self.chain_types(items[:-4])
+        member_name = items[-4]
+        function_sig = items[-3]
+        cv_qualifiers = items[-1]
+
+        if not cv_qualifiers:
+            cv_qualifiers = []
+        
         member_type = CXXMember.TYPE_VAR
-        if items[-3][0].value == '()':
+        if function_sig:
             member_type = CXXMember.TYPE_FUNC
-        main_type.parsed_member = CXXMember(items[-4], member_type, items[-1])
-        return main_type
+
+        cxx_type.parsed_member = CXXMember(member_name, member_type, cv_qualifiers)
+
+        return cxx_type
 
     def cv_qualifier(self, items : list) -> str: 
         """
@@ -567,8 +584,8 @@ if __name__ == "__main__":
     # c++filt demangles the symbols providing consistent names across platforms/abis
     # grep eprofiler to filter to only eprofiler symbols
     # TODO: move to use subprocess with piped stdout and stderr and detect failure
-    dumped_strings_fn = f'{output_fn}.txt'
-    os.system(f'nm -u {static_lib_fn} | c++filt | grep eprofiler | grep ::to_id > {dumped_strings_fn}')
+    dumped_strings_fn = output_fn.replace(".cpp", ".unresolved.txt")
+    os.system(f'nm -u {static_lib_fn} | c++filt | grep eprofiler > {dumped_strings_fn}')
 
     # Dictionary to store the registered profilers and their tags
     registered_profilers = {}
@@ -615,12 +632,21 @@ if __name__ == "__main__":
                 sha256.update(profiler_name.encode('utf-8'))
                 uuid = sha256.hexdigest()
                 registered_profilers[profiler_name]['uuid'] = f'{uuid}'
-            
 
-            tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
-            registered_profilers[profiler_name]['tags'][tag_name] = {
-                'parsed_symbol': parsed_symbol,
-            }
+                # Whether to generate value store or offset
+                registered_profilers[profiler_name]['gen_value_store'] = False
+            
+            
+            # check if parsed symbol is value_store
+            if parsed_symbol.parsed_member.name == 'value_store':
+                registered_profilers[profiler_name]['gen_value_store'] = True
+            elif parsed_symbol.parsed_member.name == 'to_id':
+                tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
+                registered_profilers[profiler_name]['tags'][tag_name] = {
+                    'parsed_symbol': parsed_symbol,
+                }
+            else:
+                raise Exception(f'Unhandled symbol: {parsed_symbol.parsed_member.name}')
 
     # Attach "hashes" to the tags
     count = 1
@@ -631,7 +657,9 @@ if __name__ == "__main__":
             count += 1
 
     hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_data['tags'].items()} for profiler_name, profiler_data in registered_profilers.items()  }
-    with open(f'{output_fn}.json', 'w') as outf:
+
+    json_fn = output_fn.replace('.cpp','.json')
+    with open(f'{json_fn}', 'w') as outf:
         outf.write(json.dumps(hash_info, indent=4))
 
     print(hash_info)
@@ -651,13 +679,8 @@ if __name__ == "__main__":
 
             outf.write(f'template<>\nconst {profiler_data["key_type"]} {profiler_data["hashtable_type"].to_cpp_string()}::offset = {profiler_data["offset"]};\n')
 
-            outf.write(f'std::array<{profiler_data["value_type"]}, {len(profiler_data["tags"])}> eprofiler_{profiler_data["uuid"]}_value_store = {{}};')
-            outf.write(f'template<>\nconst std::span<{profiler_data["value_type"]}> {profiler_data["hashtable_type"].to_cpp_string()}::value_store = std::span{{ eprofiler_{profiler_data["uuid"]}_value_store }};\n')
-
-            
-
-
-            
-
+            if profiler_data['gen_value_store']:
+                outf.write(f'std::array<{profiler_data["value_type"]}, {len(profiler_data["tags"])}> eprofiler_{profiler_data["uuid"]}_value_store = {{}};')
+                outf.write(f'template<>\nconst std::span<{profiler_data["value_type"]}> {profiler_data["hashtable_type"].to_cpp_string()}::value_store = std::span{{ eprofiler_{profiler_data["uuid"]}_value_store }};\n')
 
     sys.exit(0)
