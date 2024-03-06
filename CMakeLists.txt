@@ -17,7 +17,7 @@ option(ENABLE_CLANG_TIDY ON)
 option(ENABLE_INCLUDE_WHAT_YOU_USE ON)
 
 # 🎯 Target options
-option(BUILD_TESTS   "Build Tests" ON)
+option(BUILD_TESTS   "Build Tests" OFF)
 option(BUILD_EXAMPLE "Build Example App" OFF)
 
 ###################################
