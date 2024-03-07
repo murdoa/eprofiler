@@ -22,9 +22,8 @@ jobs:
       - name: Configure Project
         uses: threeal/cmake-action@v1.3.0
         with:
-          build-type: Debug
           build-dir: build
-          cmake-args: -DCMAKE_BUILD_TYPE=Debug -DBUILD_EXAMPLE=ON -DBUILD_TEST=ON
+          options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TEST=ON
 
       - name: Build Project
         run: cmake --build build -j $(nproc)
