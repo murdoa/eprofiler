@@ -9,9 +9,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      # Only required for other gcc versions, 10 is included in ubuntu 20.04
-      # - name: Install GCC 
-      #   run: sudo apt-get update && sudo apt-get install -y g++-10 gcc-10
+      - name: Update apt-get
+        run: sudo apt-get update
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+
+      - name: List ccache compilers
+        run: |
+          ls -l /usr/lib/ccache
 
       - name: Set up Python 3.8.5
         uses: actions/setup-python@v4
@@ -26,8 +32,8 @@ jobs:
       - name: Configure Project
         uses: threeal/cmake-action@v1.3.0
         env:
-          CC:   gcc-10
-          CXX:  g++-10
+          CC:   /usr/lib/ccache/gcc-10
+          CXX:  /usr/lib/ccache/g++-10
         with:
           build-dir: build
           options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TEST=ON
