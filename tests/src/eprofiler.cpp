@@ -4,8 +4,6 @@
 
 using namespace eprofiler::literals;
 
-#include <spdlog/fmt/compile.h>
-
 TEST_CASE("EProfilerName construction", "[EProfilerName]") {
     constexpr auto name = eprofiler::detail::EProfilerName{"Profiler"};
     REQUIRE(std::string_view{name.name} == "Profiler");
