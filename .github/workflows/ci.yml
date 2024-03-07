@@ -1,6 +1,8 @@
 name: ci
 on:
   push:
+    tags:
+      - ci-run-*
 jobs:
   build-project:
     name: Build Project
