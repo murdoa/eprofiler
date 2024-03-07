@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        gcc_version: [10]
+        gcc_version: [11]
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -48,4 +48,6 @@ jobs:
           options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TEST=ON
 
       - name: Build Project
-        run: cmake --build build -j $(nproc)
+        run: |
+          cmake --build build -j $(nproc) 
+          readelf -p .comment build/example/eprofiler_example
