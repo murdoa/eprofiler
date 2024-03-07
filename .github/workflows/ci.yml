@@ -9,6 +9,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
+      - name: Install GCC 
+        run: sudo apt-get update && sudo apt-get install -y g++-10 gcc-10
+
       - name: Set up Python 3.8.5
         uses: actions/setup-python@v4
         with:
@@ -21,6 +24,9 @@ jobs:
 
       - name: Configure Project
         uses: threeal/cmake-action@v1.3.0
+        env:
+          CC:   gcc-10
+          CXX:  g++-10
         with:
           build-dir: build
           options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TEST=ON
