@@ -11,6 +11,7 @@ jobs:
       matrix:
         gcc_version: [11]
         linker: [ ld ]
+        build_type: [ Debug, Release ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -28,7 +29,8 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.11
         with:
-          key: ${{ github.job }}-gcc${{ matrix.gcc_version }}-${{ matrix.linker }}
+          key: ${{ github.job }}-gcc${{ matrix.gcc_version }}-${{ matrix.linker }}-${{ matrix.build_type }}
+          append-timestamp: false
 
       - name: List ccache compilers
         run: |
@@ -51,7 +53,7 @@ jobs:
           CXX:  /usr/lib/ccache/g++-${{ matrix.gcc_version }}
         with:
           build-dir: build
-          options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TESTS=ON
+          options: CMAKE_BUILD_TYPE=${{ matrix.build_type }} BUILD_EXAMPLE=ON BUILD_TESTS=ON
 
       - name: Build Project
         run: |
