@@ -49,7 +49,7 @@ jobs:
           CXX:  /usr/lib/ccache/g++-${{ matrix.gcc_version }}
         with:
           build-dir: build
-          options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TEST=ON
+          options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TESTS=ON
 
       - name: Build Project
         run: |
