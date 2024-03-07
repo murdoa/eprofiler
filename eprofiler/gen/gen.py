@@ -18,8 +18,9 @@ symbol_parser = Lark(r"""
     // Exclamation mark is used to prevent filtering of underscore terminal
     !valid_name: (LETTER | "_") (LETTER | DIGIT | "_")*
                      
-    // Terminal type for fundamental integers
+    // Terminal type for fundamental integers 
     FUNDAMENTAL_INT: [ ("unsigned" | "signed") WS] ( "char" | "short" | "int" | "long" | "long" WS "int" | "long" WS "long" WS "int" )
+    OTHER_FUNDAMENTAL_WITH_WS: "long double"
 
     // Core Types
     array_type: (FUNDAMENTAL_INT | type) WS "[" integer_literal "]"
@@ -457,16 +458,28 @@ class SymbolsTransformer(Transformer):
         """
         return CXXArrType(items[0].name, [], items[2])
 
-    def FUNDAMENTAL_INT(self, items : str) -> CXXType:
+    def FUNDAMENTAL_INT(self, int_type : str) -> CXXType:
         """
         Transforms fundamental integers to CXXType.
 
         Parameters
-            items : list -> Parsed list containing [ signed, int_type ]
+            int_type : str -> Parsed fundamental integer type
         Returns
-            CXXType -> The parsed type
+            CXXType -> CXXType representing the fundamental integer type 
         """
-        return CXXType(items)
+        return CXXType(int_type)
+    
+    def OTHER_FUNDAMENTAL_WITH_WS(self, fundamental_type : str) -> CXXType:
+        """
+        Transforms other fundamental types to CXXType.
+
+        Parameters
+            fundamental_type : str -> Parsed fundamental type
+        Returns
+            CXXType -> CXXType representing the fundamental type
+        """
+
+        return CXXType(fundamental_type)
 
     def complex_type(self, items: list) -> CXXType: 
         """
