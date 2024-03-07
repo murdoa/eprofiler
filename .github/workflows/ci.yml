@@ -9,8 +9,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      - name: Install GCC 
-        run: sudo apt-get update && sudo apt-get install -y g++-10 gcc-10
+      # Only required for other gcc versions, 10 is included in ubuntu 20.04
+      # - name: Install GCC 
+      #   run: sudo apt-get update && sudo apt-get install -y g++-10 gcc-10
 
       - name: Set up Python 3.8.5
         uses: actions/setup-python@v4
