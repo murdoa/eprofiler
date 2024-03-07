@@ -27,6 +27,8 @@ jobs:
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.11
+        with:
+          key: ${{ github.job }}-gcc${{ matrix.gcc_version }}-${{ matrix.linker }}
 
       - name: List ccache compilers
         run: |
