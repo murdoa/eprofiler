@@ -10,7 +10,7 @@ TEST_CASE("EProfilerName construction", "[EProfilerName]") {
 }
 
 TEST_CASE("Verify EProfiler class functionality", "[EProfiler]") {
-    using Profiler = eprofiler::EProfiler<"Profiler1", int, int>;
+    using Profiler = eprofiler::EProfiler<"Profiler_VerifyClass", int, int>;
 
     const auto profiler = Profiler{};
 
@@ -31,8 +31,8 @@ TEST_CASE("Verify EProfiler class functionality", "[EProfiler]") {
 }
 
 TEST_CASE("Verify unique id's from linked library", "[EProfiler]") {
-    using Profiler1 = eprofiler::EProfiler<"Profiler1", int, int>;
-    using Profiler2 = eprofiler::EProfiler<"Profiler2", int, int>;
+    using Profiler1 = eprofiler::EProfiler<"Profiler_VerifyUID_1", int, int>;
+    using Profiler2 = eprofiler::EProfiler<"Profiler_VerifyUID_2", int, int>;
 
     constexpr auto profiler1_tag1 = Profiler1::StringConstant_WithID{"Tag1"_sc};
     constexpr auto profiler1_tag2 = Profiler1::StringConstant_WithID{"Tag2"_sc};
@@ -53,7 +53,7 @@ TEST_CASE("Verify unique id's from linked library", "[EProfiler]") {
 }
 
 TEST_CASE("Verify linked library value_store generation", "[EProfiler]") {
-    using Profiler = eprofiler::EProfiler<"Profiler", int, int>;
+    using Profiler = eprofiler::EProfiler<"Profiler_VerifyValueStore", int, int>;
 
     // Verify value_store operation
     Profiler::at("Tag_1"_sc) = 0;
