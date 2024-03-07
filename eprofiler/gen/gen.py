@@ -622,7 +622,7 @@ if __name__ == "__main__":
             line_start_idx = line.find('U ')
             if line_start_idx == -1 or len(line) - line_start_idx < 3 :
                 continue
-            
+
             line = line[line_start_idx+2:].strip()
 
             # Parse and transform line using Lark parser and transformer
@@ -693,7 +693,7 @@ if __name__ == "__main__":
     print(hash_info)
 
     with open(output_fn, 'w') as outf:
-        outf.write('#include <array>\n#include <chrono>\n#include <eprofiler/eprofiler.hpp>\n')
+        outf.write('#include <array>\n#include <chrono>\n#include <limits>\n#include <eprofiler/eprofiler.hpp>\n')
 
         for profiler_name, profiler_data in registered_profilers.items():
 
@@ -704,6 +704,9 @@ if __name__ == "__main__":
                 outf.write('{\n')
                 outf.write(f'    return {tag_data["hash"]};\n')
                 outf.write('}\n\n') 
+              
+                # Add static_assert to verify the hash is not outside numeric limits
+                outf.write(f'static_assert({tag_data["hash"]} <= std::numeric_limits<{profiler_data["key_type"]}>::max(), "Hash value exceeds numeric limits");\n')
 
             outf.write(f'template<>\nconst {profiler_data["key_type"]} {profiler_data["hashtable_type"].to_cpp_string()}::offset = {profiler_data["offset"]};\n')
 
