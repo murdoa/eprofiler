@@ -16,19 +16,21 @@ symbol_parser = Lark(r"""
     // Valid Type/Variable Names
     // begins with a letter, and can contain letters, digits, and underscores
     // Exclamation mark is used to prevent filtering of underscore terminal
-    !valid_name: LETTER (LETTER | DIGIT | "_")*
-
+    !valid_name: (LETTER | "_") (LETTER | DIGIT | "_")*
+                     
+    // Terminal type for fundamental integers
+    FUNDAMENTAL_INT: [ ("unsigned" | "signed") WS] ( "char" | "short" | "int" | "long" | "long" WS "int" | "long" WS "long" WS "int" )
 
     // Core Types
-    array_type: type WS "[" integer_literal "]"
+    array_type: (FUNDAMENTAL_INT | type) WS "[" integer_literal "]"
     type: valid_name [template_argument_pack]
-    any_type: (array_type | type) 
-
-    scoped_type: ((any_type "::")*  any_type)
+    // All other types that aren't simple names or scoped
+    complex_type: array_type | FUNDAMENTAL_INT
+    scoped_type: ((type "::")*  type)
 
     // Template Arguments
-    template_argument: (literal_value |  scoped_type )
-    template_argument_pack: "<" (template_argument  "," WS )* template_argument ">"
+    template_argument: literal_value |  scoped_type | complex_type
+    template_argument_pack: "<" [WS] (template_argument  [WS] "," [WS])* template_argument [WS] ">"
 
     // Literals 
     integer_literal: SIGNED_NUMBER /(?:ull|ll|ul|l|u)/i?
@@ -36,8 +38,8 @@ symbol_parser = Lark(r"""
     string_literal: ESCAPED_STRING string_literal_suffix
     initializer_list: "{" (literal_value "," WS)* [literal_value] "}"
 
-    cast_cstyle: "(" any_type ")"
-    literal_value: [cast_cstyle] (integer_literal | string_literal | (scoped_type initializer_list)) [WS]
+    cast_cstyle: "(" (complex_type | scoped_type ) ")"
+    literal_value: [cast_cstyle] (integer_literal | string_literal | (scoped_type initializer_list) | (array_type initializer_list)) [WS]
 
     // CV Qualifiers
     cv_qualifier: /const/ | /volatile/
@@ -47,15 +49,14 @@ symbol_parser = Lark(r"""
     function_sig: /\(\)/
 
     // Static Members
-    static_member: (any_type "::")+ valid_name [function_sig] [WS] [cv_qualifiers]
+    static_member: (type "::")+ valid_name [function_sig] [WS] [cv_qualifiers]
 
     %import common.LETTER
     %import common.DIGIT
     %import common.WORD
     %import common.ESCAPED_STRING
     %import common.SIGNED_NUMBER
-    %import common.WS
-    
+    %import common.WS       
     """, start='static_member', parser='lalr', maybe_placeholders=True)
 
 
@@ -274,7 +275,6 @@ class SymbolsTransformer(Transformer):
         Returns
             CXXType -> The main type of the chain
         """
-
         if len(type_chain) == 0:
             return None
 
@@ -429,7 +429,7 @@ class SymbolsTransformer(Transformer):
         Transforms template argument packs to a list of template arguments.
 
         Parameters
-            items : list -> Parsed list of template argument packs with None terminals included
+            items : list -> List of tokens with following grammar "<" [WS] (template_argument  [WS] "," [WS])* template_argument [WS] ">"
         Returns
             list -> List of template arguments
         """
@@ -457,7 +457,18 @@ class SymbolsTransformer(Transformer):
         """
         return CXXArrType(items[0].name, [], items[2])
 
-    def any_type(self, items: list) -> CXXType: 
+    def FUNDAMENTAL_INT(self, items : str) -> CXXType:
+        """
+        Transforms fundamental integers to CXXType.
+
+        Parameters
+            items : list -> Parsed list containing [ signed, int_type ]
+        Returns
+            CXXType -> The parsed type
+        """
+        return CXXType(items)
+
+    def complex_type(self, items: list) -> CXXType: 
         """
         Transforms any_type to CXXType.
 
@@ -590,6 +601,7 @@ if __name__ == "__main__":
     # Dictionary to store the registered profilers and their tags
     registered_profilers = {}
 
+
     # Parse the dumped symbols
     with open(dumped_strings_fn, 'r') as f:
         for line in f.readlines():
@@ -640,6 +652,8 @@ if __name__ == "__main__":
             # check if parsed symbol is value_store
             if parsed_symbol.parsed_member.name == 'value_store':
                 registered_profilers[profiler_name]['gen_value_store'] = True
+            elif parsed_symbol.parsed_member.name == 'offset':
+                pass
             elif parsed_symbol.parsed_member.name == 'to_id':
                 tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
                 registered_profilers[profiler_name]['tags'][tag_name] = {
@@ -665,7 +679,7 @@ if __name__ == "__main__":
     print(hash_info)
 
     with open(output_fn, 'w') as outf:
-        outf.write('#include <array>\n#include <eprofiler/eprofiler.hpp>\n')
+        outf.write('#include <array>\n#include <chrono>\n#include <eprofiler/eprofiler.hpp>\n')
 
         for profiler_name, profiler_data in registered_profilers.items():
 
