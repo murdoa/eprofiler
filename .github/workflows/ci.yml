@@ -55,3 +55,7 @@ jobs:
         run: |
           cmake --build build -j $(nproc) 
           readelf -p .comment build/example/eprofiler_example
+
+      - name: Run Tests
+        run: |
+          ctest --test-dir build
