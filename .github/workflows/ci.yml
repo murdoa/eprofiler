@@ -5,12 +5,21 @@ jobs:
   build-project:
     name: Build Project
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        gcc_version: [10]
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
       - name: Update apt-get
         run: sudo apt-get update
+
+      - name: Install gcc
+        run: sudo apt-get install -y gcc-${{ matrix.gcc_version }} g++-${{ matrix.gcc_version }}
+
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.11
@@ -32,8 +41,8 @@ jobs:
       - name: Configure Project
         uses: threeal/cmake-action@v1.3.0
         env:
-          CC:   /usr/lib/ccache/gcc-10
-          CXX:  /usr/lib/ccache/g++-10
+          CC:   /usr/lib/ccache/gcc-${{ matrix.gcc_version }}
+          CXX:  /usr/lib/ccache/g++-${{ matrix.gcc_version }}
         with:
           build-dir: build
           options: CMAKE_BUILD_TYPE=Debug BUILD_EXAMPLE=ON BUILD_TEST=ON
