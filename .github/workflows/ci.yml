@@ -27,4 +27,4 @@ jobs:
           cmake-args: -DCMAKE_BUILD_TYPE=Debug -DBUILD_EXAMPLE=ON -DBUILD_TEST=ON
 
       - name: Build Project
-        runs: cmake --build build -j $(nproc)
+        run: cmake --build build -j $(nproc)
