@@ -25,11 +25,16 @@ struct EProfilerName {
 
 } // namespace detail
 
-template<detail::EProfilerName ProfilerName, class IDTypeT, class ValueType>
-class EProfiler : protected LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType> {
+template<detail::EProfilerName ProfilerName, class IDTypeT, class ValueTypeT>
+class EProfiler : protected LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueTypeT>, IDTypeT, ValueTypeT> {
 public:
+
+    using LinkTimeHashTableT = LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueTypeT>, IDTypeT, ValueTypeT>;
+    using LinkTimeHashTableT::StringConstant_WithID;
+    using LinkTimeHashTableT::convert_string_constant;
+
     using IDType = IDTypeT;
-    using LinkTimeHashTableT = LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueType>, IDTypeT, ValueType>;
+    using ValueType = ValueTypeT;
 
     constexpr static std::string_view name() noexcept {
         return ProfilerName.name;
@@ -42,8 +47,14 @@ public:
     // Public functions operating on StringConstant tags
     template<class CharT, CharT... Chars>
     ValueType& operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
-        return this->at(str);
+        return LinkTimeHashTableT::at(str);
     }
+
+    template<class CharT, CharT... Chars>
+    static ValueType& at(StringConstant<CharT, Chars...> const& str) noexcept {
+        return LinkTimeHashTableT::at(str);
+    }
+
 
     template<class CharT, CharT... Chars>
     IDType get_id(StringConstant<CharT, Chars...> const& str) const noexcept {

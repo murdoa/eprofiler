@@ -16,4 +16,6 @@ REGISTER_EPROFILER_TARGET( TARGET_IN tests_lib
                            TARGET_GEN tests_lib_gen )
 
 add_executable(eprofiler_tests $<TARGET_OBJECTS:tests_lib_gen>)
-target_link_libraries(eprofiler_tests PUBLIC tests_lib)
+
+target_link_libraries(eprofiler_tests PUBLIC tests_lib
+                                             tests_lib_gen)

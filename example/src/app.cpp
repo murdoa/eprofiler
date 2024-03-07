@@ -15,10 +15,13 @@ int app(int argc, char *argv[]) {
 
     profiler["Inital_Tag"_sc] = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     profiler["Tag1"_sc] = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
     profiler["Tag2"_sc] = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    
     profiler["Tag3"_sc] = std::chrono::steady_clock::now();
 
     spdlog::info("Profiler name: {}", profiler.name());
