@@ -7,7 +7,8 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        gcc_version: [11]
+        gcc_version: [10]
+        linker: [ ld ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -20,6 +21,7 @@ jobs:
 
       - name: Install mold linker
         uses: rui314/setup-mold@v1
+        if: ${{ matrix.linker == 'mold' }}
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2.11
