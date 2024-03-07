@@ -621,7 +621,8 @@ if __name__ == "__main__":
             # Remove the 'U ' prefix from the line
             line_start_idx = line.find('U ')
             if line_start_idx == -1 or len(line) - line_start_idx < 3 :
-                raise Exception(f'Invalid symbol line: {line}')
+                continue
+            
             line = line[line_start_idx+2:].strip()
 
             # Parse and transform line using Lark parser and transformer
