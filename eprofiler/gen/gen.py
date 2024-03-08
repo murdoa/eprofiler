@@ -671,12 +671,15 @@ if __name__ == "__main__":
                     'key_type': keytype,
                     'value_type': valuetype,
                     'gen_value_store': False,
-                    'is_profiler': is_profiler
+                    'is_profiler': is_profiler,
+                    'gen_keys': False,
                 }
                         
             # check if parsed symbol is value_store
             if parsed_symbol.parsed_member.name == 'value_store':
                 registered_hashtables[unique_type_key]['gen_value_store'] = True
+            elif parsed_symbol.parsed_member.name == 'keys':
+                registered_hashtables[unique_type_key]['gen_keys'] = True
             elif parsed_symbol.parsed_member.name == 'offset':
                 pass
             elif parsed_symbol.parsed_member.name == 'to_id':
@@ -704,7 +707,7 @@ if __name__ == "__main__":
     print(hash_info)
 
     with open(output_fn, 'w') as outf:
-        outf.write('#include <array>\n#include <chrono>\n#include <limits>\n#include <eprofiler/eprofiler.hpp>\n')
+        outf.write('#include <array>\n#include <chrono>\n#include <limits>\n#include <string_view>\n#include <eprofiler/eprofiler.hpp>\n')
 
         for hashtable_unique_type, hashtable_data in registered_hashtables.items():
 
@@ -724,5 +727,18 @@ if __name__ == "__main__":
             if hashtable_data['gen_value_store']:
                 outf.write(f'std::array<{hashtable_data["value_type"]}, {len(hashtable_data["tags"])}> eprofiler_{hashtable_data["uuid"]}_value_store = {{}};')
                 outf.write(f'template<>\nconst std::span<{hashtable_data["value_type"]}> {hashtable_data["hashtable_type"].to_cpp_string()}::value_store = std::span{{ eprofiler_{hashtable_data["uuid"]}_value_store }};\n')
+
+            if hashtable_data['gen_keys']:
+
+                offset = hashtable_data['offset']
+
+                keys = sorted([ (tag_name, tag_data['hash'] - offset) for tag_name, tag_data in hashtable_data['tags'].items() ], key=lambda x: x[1])
+
+                keys_str = ', '.join([ f'"{tag_name}"' for tag_name, _ in keys])
+
+                outf.write(f'const std::array<const std::string_view, {len(hashtable_data["tags"])}> eprofiler_{hashtable_data["uuid"]}_keys = {{ {keys_str} }};\n')
+                outf.write(f'template<>\nconst std::span<const std::string_view> {hashtable_data["hashtable_type"].to_cpp_string()}::keys = std::span{{ eprofiler_{hashtable_data["uuid"]}_keys }};\n')
+
+            outf.write('\n')
 
     sys.exit(0)
