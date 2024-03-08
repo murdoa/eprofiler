@@ -39,6 +39,10 @@ private:
 
 public:
 
+    static ValueType& at(const IDType idx) noexcept {
+        return value_store[idx - offset];
+    }
+
     // Public functions operating on StringConstant tags
     template<class CharT, CharT... Chars>
     static ValueType& at(StringConstant<CharT, Chars...> const& str) noexcept {

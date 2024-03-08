@@ -7,7 +7,7 @@
 #include <eprofiler/eprofiler.hpp>
 using namespace eprofiler::literals;
 
-TEST_CASE("Verify EProfiler class functionality", "[EProfiler]") {
+TEST_CASE("Verify EProfiler interface functionality", "[EProfiler]") {
     struct SteadyClock {
         using time_point = int;
 
