@@ -1,70 +1,81 @@
+
 #include <catch2/catch_test_macros.hpp>
 
-#include <eprofiler/eprofiler.hpp>
+#include <chrono>
+#include <thread>
 
+#include <eprofiler/eprofiler.hpp>
 using namespace eprofiler::literals;
 
-TEST_CASE("EProfilerName construction", "[EProfilerName]") {
-    constexpr auto name = eprofiler::detail::EProfilerName{"Profiler"};
-    REQUIRE(std::string_view{name.name} == "Profiler");
-}
-
 TEST_CASE("Verify EProfiler class functionality", "[EProfiler]") {
-    using Profiler = eprofiler::EProfiler<"Profiler_VerifyClass", int, int>;
+    struct SteadyClock {
+        using time_point = int;
 
-    const auto profiler = Profiler{};
+        static time_point now(bool reset=false) {
+            static int current_time = 0;
+            if (reset) {
+                current_time = 0;
+            }
+            return current_time++;
+        }
+    };
 
-    SECTION("operator[] and at method") {
+    using EProfiler = eprofiler::EProfiler<eprofiler::EProfilerTag{"Test"}, int, SteadyClock>;    
 
-        profiler["Tag1"_sc] = 17;
+    SECTION("set_time and get_duration method") {
+        SteadyClock::now(true);
 
-        REQUIRE(profiler["Tag1"_sc] == 17);
-        REQUIRE(profiler.at("Tag1"_sc) == 17);
-        REQUIRE(Profiler::at("Tag1"_sc) == 17);
+        EProfiler::set_time("Tag1"_sc);
+        EProfiler::set_time("Tag2"_sc);
+        EProfiler::set_time("Tag3"_sc);
 
-        profiler.at("Tag1"_sc) = 42;
+        REQUIRE(EProfiler::get_time("Tag1"_sc) == 1);
+        REQUIRE(EProfiler::get_time("Tag2"_sc) == 2);
+        REQUIRE(EProfiler::get_time("Tag3"_sc) == 3); 
 
-        REQUIRE(profiler["Tag1"_sc] == 42);
-        REQUIRE(profiler.at("Tag1"_sc) == 42);
-        REQUIRE(Profiler::at("Tag1"_sc) == 42);
+        REQUIRE(EProfiler::get_duration("Tag1"_sc, "Tag1"_sc) == 0);
+        REQUIRE(EProfiler::get_duration("Tag2"_sc, "Tag2"_sc) == 0);
+        REQUIRE(EProfiler::get_duration("Tag3"_sc, "Tag3"_sc) == 0);
+
+        REQUIRE(EProfiler::get_duration("Tag1"_sc, "Tag2"_sc) == 1);
+        REQUIRE(EProfiler::get_duration("Tag1"_sc, "Tag3"_sc) == 2);
+        REQUIRE(EProfiler::get_duration("Tag2"_sc, "Tag3"_sc) == 1);
     }
 }
 
-TEST_CASE("Verify unique id's from linked library", "[EProfiler]") {
-    using Profiler1 = eprofiler::EProfiler<"Profiler_VerifyUID_1", int, int>;
-    using Profiler2 = eprofiler::EProfiler<"Profiler_VerifyUID_2", int, int>;
 
-    constexpr auto profiler1_tag1 = Profiler1::StringConstant_WithID{"Tag1"_sc};
-    constexpr auto profiler1_tag2 = Profiler1::StringConstant_WithID{"Tag2"_sc};
+TEST_CASE("Verify EProfiler functionality with std::steady_clock", "[EProfiler]") {
+    using EProfiler = eprofiler::EProfiler<eprofiler::EProfilerTag{"Test"}, int, std::chrono::steady_clock>;    
 
-    constexpr auto profiler2_tag1 = Profiler2::StringConstant_WithID{"Tag1"_sc};
-    constexpr auto profiler2_tag2 = Profiler2::StringConstant_WithID{"Tag2"_sc};
+    SECTION("set_time and get_duration method") {
 
-    // Check that the tags are unique
-    REQUIRE(profiler1_tag1.to_id() != profiler1_tag2.to_id());
-    REQUIRE(profiler2_tag1.to_id() != profiler2_tag2.to_id());
+        const auto dur_cast = [](auto dur) {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(dur);
+        };
 
-    // Check that the tags are unique between profilers
-    REQUIRE(profiler1_tag1.to_id() != profiler2_tag1.to_id());
-    REQUIRE(profiler1_tag2.to_id() != profiler2_tag2.to_id());
+        const auto start_time = std::chrono::steady_clock::now();
+        EProfiler::set_time("Tag1"_sc);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        EProfiler::set_time("Tag2"_sc);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        EProfiler::set_time("Tag3"_sc);
 
-    // Check that the offsets are unique
-    REQUIRE(Profiler1::get_offset() != Profiler2::get_offset());
-}
+        // Verify logged times are within 1ms of expected
+        REQUIRE(EProfiler::get_time("Tag1"_sc) - start_time < std::chrono::milliseconds(1));
+        REQUIRE(EProfiler::get_time("Tag2"_sc) - start_time < std::chrono::milliseconds(21));
+        REQUIRE(EProfiler::get_time("Tag3"_sc) - start_time < std::chrono::milliseconds(31));
 
-TEST_CASE("Verify linked library value_store generation", "[EProfiler]") {
-    using Profiler = eprofiler::EProfiler<"Profiler_VerifyValueStore", int, int>;
+        // Verify time ordering
+        REQUIRE(EProfiler::get_time("Tag1"_sc) < EProfiler::get_time("Tag2"_sc));
+        REQUIRE(EProfiler::get_time("Tag2"_sc) < EProfiler::get_time("Tag3"_sc));
 
-    // Verify value_store operation
-    Profiler::at("Tag_1"_sc) = 0;
-    Profiler::at("Tag_2"_sc) = 0;
+        // Verify duration calculations
+        REQUIRE(EProfiler::get_duration("Tag1"_sc, "Tag1"_sc) == std::chrono::steady_clock::duration::zero());
+        REQUIRE(EProfiler::get_duration("Tag2"_sc, "Tag2"_sc) == std::chrono::steady_clock::duration::zero());
+        REQUIRE(EProfiler::get_duration("Tag3"_sc, "Tag3"_sc) == std::chrono::steady_clock::duration::zero());
 
-    REQUIRE(Profiler::at("Tag_1"_sc) == 0);
-    REQUIRE(Profiler::at("Tag_2"_sc) == 0);
-
-    Profiler::at("Tag_1"_sc) = 1;
-    Profiler::at("Tag_2"_sc) = 2;
-
-    REQUIRE(Profiler::at("Tag_1"_sc) == 1);
-    REQUIRE(Profiler::at("Tag_2"_sc) == 2);
+        REQUIRE(dur_cast(EProfiler::get_duration("Tag1"_sc, "Tag2"_sc)) == std::chrono::milliseconds(10));
+        REQUIRE(dur_cast(EProfiler::get_duration("Tag1"_sc, "Tag3"_sc)) == std::chrono::milliseconds(20));
+        REQUIRE(dur_cast(EProfiler::get_duration("Tag2"_sc, "Tag3"_sc)) == std::chrono::milliseconds(10));
+    }
 }

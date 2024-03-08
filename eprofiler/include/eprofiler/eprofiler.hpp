@@ -2,7 +2,10 @@
 #define EPROFILER_EPROFILER_HPP
 
 #include <algorithm>
+#include <concepts>
+#include <optional>
 #include <span>
+#include <tuple>
 
 #include <eprofiler/uniquetype.hpp>
 #include <eprofiler/linktimehashtable.hpp>
@@ -11,53 +14,35 @@
 
 namespace eprofiler {
 
-namespace detail {
-
 template<std::size_t N>
-struct EProfilerName {
+struct EProfilerTag {
     char name[N];
 
-    constexpr EProfilerName(const char (&name_)[N]) {
+    constexpr EProfilerTag(const char (&name_)[N]) {
         std::copy_n(name_, N, name);
     }
-}; // struct EProfilerName
+}; // struct EProfilerTag
 
-} // namespace detail
-
-template<detail::EProfilerName ProfilerName, class IDTypeT, class ValueTypeT>
-class EProfiler : protected LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueTypeT>, IDTypeT, ValueTypeT> {
+template<EProfilerTag ProfilerTag, std::integral IndexT, class SteadyClock>
+class EProfiler : protected LinkTimeHashTable<EProfiler<ProfilerTag, IndexT, typename SteadyClock::time_point>, IndexT, typename SteadyClock::time_point> {
+    using LinkTimeHashTableT = LinkTimeHashTable<EProfiler<ProfilerTag, IndexT, typename SteadyClock::time_point>, IndexT, typename SteadyClock::time_point>;
 public:
+    using index_type = IndexT;
+    using time_point = typename SteadyClock::time_point;
 
-    using LinkTimeHashTableT = LinkTimeHashTable<EProfiler<ProfilerName, IDTypeT, ValueTypeT>, IDTypeT, ValueTypeT>;
-    using LinkTimeHashTableT::StringConstant_WithID;
-    using LinkTimeHashTableT::convert_string_constant;
-
-    using IDType = IDTypeT;
-    using ValueType = ValueTypeT;
-
-    constexpr static std::string_view name() noexcept {
-        return ProfilerName.name;
-    }
-
-    static IDType get_offset() noexcept {
-        return LinkTimeHashTableT::offset;
-    }
-
-    // Public functions operating on StringConstant tags
     template<class CharT, CharT... Chars>
-    ValueType& operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
-        return LinkTimeHashTableT::at(str);
+    static void set_time(StringConstant<CharT, Chars...> const tag) noexcept {
+        LinkTimeHashTableT::at(tag) = SteadyClock::now();
     }
 
     template<class CharT, CharT... Chars>
-    static ValueType& at(StringConstant<CharT, Chars...> const& str) noexcept {
-        return LinkTimeHashTableT::at(str);
+    static time_point& get_time(StringConstant<CharT, Chars...> const tag) noexcept {
+        return LinkTimeHashTableT::at(tag);
     }
 
-
-    template<class CharT, CharT... Chars>
-    IDType get_id(StringConstant<CharT, Chars...> const& str) const noexcept {
-        return LinkTimeHashTableT::get_id(str);
+    template<class CharT1, CharT1... Chars1, class CharT2, CharT2... Chars2>
+    static auto get_duration(StringConstant<CharT1, Chars1...> const start, StringConstant<CharT2, Chars2...> const end) noexcept {
+        return LinkTimeHashTableT::at(end) - LinkTimeHashTableT::at(start);
     }
 
 }; // class EProfiler
