@@ -34,7 +34,7 @@ private:
     // Private functions operating on StringConstant_WithID keys
     template<class CharT, CharT... Chars>
     static ValueType& at(StringConstant_WithID<CharT, Chars...> const& str) noexcept {
-        return value_store[str.to_id()];
+        return value_store[str.to_id() - offset];
     }
 
 public:
