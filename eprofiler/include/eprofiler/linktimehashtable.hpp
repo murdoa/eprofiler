@@ -6,8 +6,8 @@
 
 namespace eprofiler {
 
-// class EProfilerTmpl to couple StringConstat_WithID with specific EProfiler
-template<class EProfilerTmpl, class IDType, class ValueType>
+// class UniqueType to couple StringConstat_WithID with specific UniqueType
+template<class UniqueType, class IDType, class ValueType>
 class LinkTimeHashTable {
     static_assert(std::is_integral_v<IDType>, "IDType must be an integral type");
     
@@ -46,11 +46,16 @@ public:
     }
 
     template<class CharT, CharT... Chars>
+    ValueType& operator[](StringConstant<CharT, Chars...> const& str) const noexcept {
+        return at(str);
+    }
+
+    template<class CharT, CharT... Chars>
     static IDType get_id(StringConstant<CharT, Chars...> const& str) noexcept {
         return convert_string_constant(str).to_id();
     }
 
-}; // class EProfiler
+}; // class LinkTimeHashTable
 
 
 } // namespace eprofiler

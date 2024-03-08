@@ -611,8 +611,8 @@ if __name__ == "__main__":
     dumped_strings_fn = output_fn.replace(".cpp", ".unresolved.txt")
     os.system(f'nm -u {static_lib_fn} | c++filt | grep eprofiler > {dumped_strings_fn}')
 
-    # Dictionary to store the registered profilers and their tags
-    registered_profilers = {}
+    # Dictionary to store the registered hashtables and their tags
+    registered_hashtables = {}
 
 
     # Parse the dumped symbols
@@ -629,48 +629,59 @@ if __name__ == "__main__":
             symbol = symbol_parser.parse(line)
             parsed_symbol = SymbolsTransformer().transform(symbol)
 
-            # Extract the profiler name and tag name from the parsed symbol
-            profiler_name_literal = parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0]
-            profiler_name_char_init_list = profiler_name_literal.literal_value.values[0].literal_value.values
-            profiler_name = ''.join([ chr(x.literal_value) for x in profiler_name_char_init_list]) # 
-            # Replace the char array with a string literal
-            parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0] = CXXLiteral(None, 'string', '"' + profiler_name + '"')
+            if parsed_symbol.name != 'eprofiler':
+                # Skip symbols that are not in eprofiler namespace
+                continue
 
+            is_profiler = False
+            hashtable_parent_uniquetype = parsed_symbol.parsed_child.template_args[0]
+
+            # Check if hashtable is a profiler and convert the profiler name to a string literal
+            if hashtable_parent_uniquetype.name == 'eprofiler' and hashtable_parent_uniquetype.parsed_child.name == 'EProfiler':
+                is_profiler = True
+                # Extract the profiler name and tag name from the parsed symbol
+                profiler_name_literal = parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0]
+                profiler_name_char_init_list = profiler_name_literal.literal_value.values[0].literal_value.values
+                profiler_name = ''.join([ chr(x.literal_value) for x in profiler_name_char_init_list]) # 
+                # Replace the char array with a string literal
+                parsed_symbol.parsed_child.template_args[0].parsed_child.template_args[0] = CXXLiteral(None, 'string', '"' + profiler_name + '"')
+
+
+            # Extract template arg 0 which uniquely identifies the hashtable
+            unique_type_key = hashtable_parent_uniquetype.to_cpp_string()
             # Extract return and value type from eprofiler template args
             keytype = parsed_symbol.parsed_child.template_args[1].to_cpp_string()
             valuetype = parsed_symbol.parsed_child.template_args[2].to_cpp_string()
 
             # Register the profiler if first time seen
-            if profiler_name not in registered_profilers:
-                registered_profilers[profiler_name] = {}
-
+            if unique_type_key not in registered_hashtables:
                 hashtable_type = copy.deepcopy(parsed_symbol)
                 hashtable_type.parsed_member = None
                 hashtable_type.parsed_child.parsed_child = None
 
-                registered_profilers[profiler_name]['tags'] = {}
-                registered_profilers[profiler_name]['hashtable_type'] = hashtable_type
-                registered_profilers[profiler_name]['key_type'] = keytype
-                registered_profilers[profiler_name]['value_type'] = valuetype
-
                 # Generate UUID
                 sha256 = hashlib.new('sha256')
-                sha256.update(profiler_name.encode('utf-8'))
-                uuid = sha256.hexdigest()
-                registered_profilers[profiler_name]['uuid'] = f'{uuid}'
+                sha256.update(unique_type_key.encode('utf-8'))
+                hashtable_uuid = sha256.hexdigest()
 
-                # Whether to generate value store or offset
-                registered_profilers[profiler_name]['gen_value_store'] = False
-            
-            
+                registered_hashtables[unique_type_key] = {
+                    'uuid': hashtable_uuid,
+                    'tags': {},
+                    'hashtable_type': hashtable_type,
+                    'key_type': keytype,
+                    'value_type': valuetype,
+                    'gen_value_store': False,
+                    'is_profiler': is_profiler
+                }
+                        
             # check if parsed symbol is value_store
             if parsed_symbol.parsed_member.name == 'value_store':
-                registered_profilers[profiler_name]['gen_value_store'] = True
+                registered_hashtables[unique_type_key]['gen_value_store'] = True
             elif parsed_symbol.parsed_member.name == 'offset':
                 pass
             elif parsed_symbol.parsed_member.name == 'to_id':
                 tag_name = ''.join([ chr(x.literal_value) for x in parsed_symbol.parsed_child.parsed_child.template_args[1:]]) 
-                registered_profilers[profiler_name]['tags'][tag_name] = {
+                registered_hashtables[unique_type_key]['tags'][tag_name] = {
                     'parsed_symbol': parsed_symbol,
                 }
             else:
@@ -678,13 +689,13 @@ if __name__ == "__main__":
 
     # Attach "hashes" to the tags
     count = 1
-    for profiler_name, profiler_data in registered_profilers.items():
-        profiler_data['offset'] = count
-        for tag_name, tag_data in profiler_data['tags'].items():
+    for unique_type_key, hashtable_data in registered_hashtables.items():
+        hashtable_data['offset'] = count
+        for tag_name, tag_data in hashtable_data['tags'].items():
             tag_data['hash'] = count
             count += 1
 
-    hash_info = { profiler_name: { tag_name: tag_data['hash'] for tag_name, tag_data in profiler_data['tags'].items()} for profiler_name, profiler_data in registered_profilers.items()  }
+    hash_info = { unique_type_key: { tag_name: tag_data['hash'] for tag_name, tag_data in hashtable_data['tags'].items()} for unique_type_key, hashtable_data in registered_hashtables.items()  }
 
     json_fn = output_fn.replace('.cpp','.json')
     with open(f'{json_fn}', 'w') as outf:
@@ -695,10 +706,10 @@ if __name__ == "__main__":
     with open(output_fn, 'w') as outf:
         outf.write('#include <array>\n#include <chrono>\n#include <limits>\n#include <eprofiler/eprofiler.hpp>\n')
 
-        for profiler_name, profiler_data in registered_profilers.items():
+        for hashtable_unique_type, hashtable_data in registered_hashtables.items():
 
-            for tag_name, tag_data in profiler_data['tags'].items():
-                func_sig = f"template<>\ntemplate<>\n{profiler_data['key_type']} {tag_data['parsed_symbol'].to_cpp_string()} noexcept"
+            for tag_name, tag_data in hashtable_data['tags'].items():
+                func_sig = f"template<>\ntemplate<>\n{hashtable_data['key_type']} {tag_data['parsed_symbol'].to_cpp_string()} noexcept"
 
                 outf.write(func_sig)
                 outf.write('{\n')
@@ -706,12 +717,12 @@ if __name__ == "__main__":
                 outf.write('}\n\n') 
               
                 # Add static_assert to verify the hash is not outside numeric limits
-                outf.write(f'static_assert({tag_data["hash"]} <= std::numeric_limits<{profiler_data["key_type"]}>::max(), "Hash value exceeds numeric limits");\n')
+                outf.write(f'static_assert({tag_data["hash"]} <= std::numeric_limits<{hashtable_data["key_type"]}>::max(), "Hash value exceeds numeric limits");\n')
 
-            outf.write(f'template<>\nconst {profiler_data["key_type"]} {profiler_data["hashtable_type"].to_cpp_string()}::offset = {profiler_data["offset"]};\n')
+            outf.write(f'template<>\nconst {hashtable_data["key_type"]} {hashtable_data["hashtable_type"].to_cpp_string()}::offset = {hashtable_data["offset"]};\n')
 
-            if profiler_data['gen_value_store']:
-                outf.write(f'std::array<{profiler_data["value_type"]}, {len(profiler_data["tags"])}> eprofiler_{profiler_data["uuid"]}_value_store = {{}};')
-                outf.write(f'template<>\nconst std::span<{profiler_data["value_type"]}> {profiler_data["hashtable_type"].to_cpp_string()}::value_store = std::span{{ eprofiler_{profiler_data["uuid"]}_value_store }};\n')
+            if hashtable_data['gen_value_store']:
+                outf.write(f'std::array<{hashtable_data["value_type"]}, {len(hashtable_data["tags"])}> eprofiler_{hashtable_data["uuid"]}_value_store = {{}};')
+                outf.write(f'template<>\nconst std::span<{hashtable_data["value_type"]}> {hashtable_data["hashtable_type"].to_cpp_string()}::value_store = std::span{{ eprofiler_{hashtable_data["uuid"]}_value_store }};\n')
 
     sys.exit(0)
