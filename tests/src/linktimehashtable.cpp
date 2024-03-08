@@ -26,8 +26,8 @@ TEST_CASE("Verify LinkTimeHashTable class functionality", "[LinkTimeHashTable]")
 }
 
 TEST_CASE("Verify unique id's from linked library", "[LinkTimeHashTable]") {
-    using LinkTimeHashTable1 = eprofiler::LinkTimeHashTable<void, int, int>;
-    using LinkTimeHashTable2 = eprofiler::LinkTimeHashTable<bool, int, int>;
+    using LinkTimeHashTable1 = eprofiler::LinkTimeHashTable<EPROFILER_UNIQUE_TYPE(), int, int>;
+    using LinkTimeHashTable2 = eprofiler::LinkTimeHashTable<EPROFILER_UNIQUE_TYPE(), int, int>;
 
     constexpr auto hashtable1_tag1 = LinkTimeHashTable1::StringConstant_WithID{"Tag1"_sc};
     constexpr auto hashtable1_tag2 = LinkTimeHashTable1::StringConstant_WithID{"Tag2"_sc};

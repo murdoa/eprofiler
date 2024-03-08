@@ -4,8 +4,7 @@
 #include <algorithm>
 #include <span>
 
-class EProfiler;
-
+#include <eprofiler/uniquetype.hpp>
 #include <eprofiler/linktimehashtable.hpp>
 
 #include "stringconstant.hpp"
